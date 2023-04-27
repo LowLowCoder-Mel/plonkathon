@@ -24,14 +24,17 @@ class Setup(object):
     def from_file(cls, filename):
         contents = open(filename, "rb").read()
         # Byte 60 gives you the base-2 log of how many powers there are
+        # Byte 60 给出了幂的数量的以2为底的对数。
         powers = 2 ** contents[SETUP_FILE_POWERS_POS]
         # Extract G1 points, which start at byte 80
+        # 提取从字节80开始的 G1 点
         values = [
             int.from_bytes(contents[i : i + 32], "little")
             for i in range(
                 SETUP_FILE_G1_STARTPOS, SETUP_FILE_G1_STARTPOS + 32 * powers * 2, 32
             )
         ]
+        print(len(values))
         assert max(values) < b.field_modulus
         # The points are encoded in a weird encoding, where all x and y points
         # are multiplied by a factor (for montgomery optimization?). We can
@@ -69,9 +72,29 @@ class Setup(object):
         # Run inverse FFT to convert values from Lagrange basis to monomial basis
         # Optional: Check values size does not exceed maximum power setup can handle
         # Compute linear combination of setup with values
-        return NotImplemented
+        coeffs = values.ifft().values
+        
+        # Optional: Check values size does not exceed maximum power setup can handle
+        # assert len(evals.values) <= max_degree + 1, "Values size exceeds maximum power setup can handle"
+        # Compute linear combination of setup with values
+        if len(coeffs) > len(self.powers_of_x):
+            raise Exception("Not enough powers in setup")
+
+        return ec_lincomb([(s, x) for s, x in zip(self.powers_of_x, coeffs)])
 
     # Generate the verification key for this program with the given setup
     def verification_key(self, pk: CommonPreprocessedInput) -> VerificationKey:
         # Create the appropriate VerificationKey object
-        return NotImplemented
+        return VerificationKey(
+            pk.group_order,
+            self.commit(pk.QM),
+            self.commit(pk.QL),
+            self.commit(pk.QR),
+            self.commit(pk.QO),
+            self.commit(pk.QC),
+            self.commit(pk.S1),
+            self.commit(pk.S2),
+            self.commit(pk.S3),
+            self.X2,
+            Scalar.root_of_unity(pk.group_order),
+        )
